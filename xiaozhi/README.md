@@ -18,6 +18,17 @@ This repo holds Grey's own build artifacts and config for this board — not a v
 - `build-config/sdkconfig` — the exact resolved config used, with two fixes applied on top of Freenove's plain defaults:
   - `CONFIG_SR_WN_WN9S_HIESP=y` (wake word — plain default is the Mandarin `NIHAOXIAOZHI` model, not "Hi, ESP"; the "S" variant is a newer/smaller model that tested faster than the plain `WN9_HIESP`)
   - `CONFIG_LANGUAGE_EN_US=y` (system UI language — plain default is `ZH_CN`, causes Chinese notification/status text)
+- `custom-source/` — Grey's own code changes on top of Freenove's fork (not vendored upstream source). Currently just the push-OTA server — see its own README for what it does and how to reapply it to a fresh checkout.
+
+## Updating the firmware over the network (no BOOT button needed)
+
+As of the push-OTA server (see `custom-source/`), updates after the initial flash don't need physical access to the board:
+
+```bash
+curl -X POST -H "X-OTA-Token: REDACTED-TOKEN" --data-binary @firmware/xiaozhi.bin http://<device-ip>:8080/update
+```
+
+Confirmed working end-to-end 2026-08-24. Only updates app code — a wake-word model change still needs a full manual flash.
 
 From-source build environment on this machine lives at `C:\esp-idf` (ESP-IDF v5.4.2) and `C:\dev\xiaozhi-esp32-src` (Freenove's fork, already configured to match `build-config/sdkconfig` above).
 
