@@ -6,6 +6,8 @@ Stock XiaoZhi AI voice assistant running on Grey's Freenove FNK0104B (2.8" ILI93
 
 Working end-to-end: boots clean, connects to WiFi, voice wake word ("Hi, ESP") and BOOT-button push-to-talk both trigger listening, gets replies. Agent name in xiaozhi.me console: **Papa Lanc**.
 
+Wake word uses the `wn9s_hiesp` model (not the original `wn9_hiesp`) — confirmed via live testing to detect noticeably faster (~16s vs ~28s in back-to-back tests) with clean multi-turn conversations following.
+
 Freenove's prebuilt binaries (both the doc's `Upload_Xiaozhi_Bin` folder and their web flasher) crash-loop on this board and don't work — fixed by building from source instead. Root cause of the prebuilt failure remains unresolved (see project memory / commit history); it isn't a PSRAM config issue, that setting is identical and correct in both.
 
 ## What's in this repo
@@ -14,7 +16,7 @@ This repo holds Grey's own build artifacts and config for this board — not a v
 
 - `firmware/` — the built binaries flashed to the board (`bootloader.bin`, `partition-table.bin`, `ota_data_initial.bin`, `srmodels.bin`, `xiaozhi.bin`, `merged-binary.bin`)
 - `build-config/sdkconfig` — the exact resolved config used, with two fixes applied on top of Freenove's plain defaults:
-  - `CONFIG_SR_WN_WN9_HIESP=y` (wake word — plain default is the Mandarin `NIHAOXIAOZHI` model, not "Hi, ESP")
+  - `CONFIG_SR_WN_WN9S_HIESP=y` (wake word — plain default is the Mandarin `NIHAOXIAOZHI` model, not "Hi, ESP"; the "S" variant is a newer/smaller model that tested faster than the plain `WN9_HIESP`)
   - `CONFIG_LANGUAGE_EN_US=y` (system UI language — plain default is `ZH_CN`, causes Chinese notification/status text)
 
 From-source build environment on this machine lives at `C:\esp-idf` (ESP-IDF v5.4.2) and `C:\dev\xiaozhi-esp32-src` (Freenove's fork, already configured to match `build-config/sdkconfig` above).
