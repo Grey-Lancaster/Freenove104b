@@ -1,2 +1,5 @@
 Freenove_ESP32_S3_Display-main/
 Freenove_ESP32_S3_Display-main.zip
+
+# PlatformIO build artifacts (every chapter folder has its own)
+.pio/
