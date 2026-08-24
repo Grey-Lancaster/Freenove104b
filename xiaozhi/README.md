@@ -1,0 +1,30 @@
+# XiaoZhi AI Voice Assistant — Freenove FNK0104B
+
+Stock XiaoZhi AI voice assistant running on Grey's Freenove FNK0104B (2.8" ILI9341 display) board.
+
+## Status
+
+Working end-to-end: boots clean, connects to WiFi, voice wake word ("Hi, ESP") and BOOT-button push-to-talk both trigger listening, gets replies. Agent name in xiaozhi.me console: **Papa Lanc**.
+
+Freenove's prebuilt binaries (both the doc's `Upload_Xiaozhi_Bin` folder and their web flasher) crash-loop on this board and don't work — fixed by building from source instead. Root cause of the prebuilt failure remains unresolved (see project memory / commit history); it isn't a PSRAM config issue, that setting is identical and correct in both.
+
+## What's in this repo
+
+This repo holds Grey's own build artifacts and config for this board — not a vendored copy of Freenove's source (that lives at [github.com/Freenove/xiaozhi-esp32](https://github.com/Freenove/xiaozhi-esp32), forked from [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)).
+
+- `firmware/` — the built binaries flashed to the board (`bootloader.bin`, `partition-table.bin`, `ota_data_initial.bin`, `srmodels.bin`, `xiaozhi.bin`, `merged-binary.bin`)
+- `build-config/sdkconfig` — the exact resolved config used, with two fixes applied on top of Freenove's plain defaults:
+  - `CONFIG_SR_WN_WN9_HIESP=y` (wake word — plain default is the Mandarin `NIHAOXIAOZHI` model, not "Hi, ESP")
+  - `CONFIG_LANGUAGE_EN_US=y` (system UI language — plain default is `ZH_CN`, causes Chinese notification/status text)
+
+From-source build environment on this machine lives at `C:\esp-idf` (ESP-IDF v5.4.2) and `C:\dev\xiaozhi-esp32-src` (Freenove's fork, already configured to match `build-config/sdkconfig` above).
+
+## To-Do
+
+- [ ] **Connect XiaoZhi to Home Assistant via MCP**, so voice commands can control lights and query sensors (e.g. temperature). Steps (needs to happen while home, on the same network as Home Assistant):
+  1. In Home Assistant: Settings → Devices & Services → Add Integration → **"Model Context Protocol Server"**. Configure which entities it exposes (lights, temperature sensors, etc.).
+  2. Install [HACS](https://hacs.xyz/) if not already installed.
+  3. In HACS → Integrations → ⋮ → Custom repositories → add `https://github.com/mac8005/xiaozhi-mcp-ha` as type "Integration". Install "Xiaozhi MCP", restart Home Assistant.
+  4. Create a Home Assistant long-lived access token: Settings → People → your user → Long-lived access tokens.
+  5. Get the XiaoZhi MCP endpoint from the xiaozhi.me console (under the Papa Lanc agent's settings — exact menu location not yet confirmed, find together next time).
+  6. In Home Assistant: Settings → Devices & Services → Add Integration → **"Xiaozhi MCP"** → enter name, xiaozhi.me endpoint URL, HA access token, scan interval (30s default).
