@@ -38,6 +38,12 @@ exact ES8311/board combo.
 
 ## Volume
 
-Default volume is set to **19** (of 0–21) in `setup()` — loud enough to
-actually hear the demo; adjust `audio.setVolume(...)` in `src/main.cpp`
-if that's too loud for your setup.
+Default volume is set to **21** (max, of 0–21) in `setup()` — after fixing
+the MCLK bug above, 19 was still too quiet to hear comfortably on this
+board's speaker, so it's bumped to max. `setVolume()`'s argument isn't
+linear: it indexes a 22-entry lookup table
+(`lib_freenove/ESP32-audioI2S/src/Audio.h`) that maps 0–21 to an internal
+gain of `{0,1,2,3,4,6,8,10,12,14,17,20,23,27,30,34,38,43,48,52,58,64}` —
+so 19 was gain 52/64, not "19/21 of the way there." Adjust
+`audio.setVolume(...)` in `src/main.cpp` if max is too loud for your
+setup.

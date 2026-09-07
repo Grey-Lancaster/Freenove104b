@@ -39,3 +39,25 @@ explicitly as the 5th argument. Confirmed against the sibling `translate`
 project ([github.com/Grey-Lancaster/translate](https://github.com/Grey-Lancaster/translate)),
 which independently documented this same MCLK requirement for this exact
 codec/board.
+
+## Bug fixed: startup volume ignored the slider
+
+The volume slider was created with:
+
+```cpp
+lv_slider_set_range(ui->music_slider_valume, 0, 21);
+lv_slider_set_value(ui->music_slider_valume, 10, LV_ANIM_OFF);
+```
+
+`lv_slider_set_value()` only moves the widget — it does **not** fire
+LVGL's value-changed event, which is what the slider's own handler
+(`music_slider_change_event_handler`) relies on to actually call
+`music_set_volume()` → `audio.setVolume()`. So at startup the slider
+*displayed* 10 but `audio.setVolume()` was never called at all, leaving
+the codec at `Audio`'s uninitialized class-member default of `m_vol = 64`
+— i.e. **max volume**, louder than even an explicit `setVolume(21)` —
+until the user actually dragged the slider once. This is why the demo
+played noticeably louder than `07_Music` despite the on-screen slider
+reading a lower number. Fixed by calling `music_set_volume(10)`
+immediately after the `lv_slider_set_value()` call so playback actually
+starts at what's displayed.
