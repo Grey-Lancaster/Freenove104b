@@ -56,8 +56,9 @@
 #endif
 
 Audio audio;
+static bool g_i2s_ok = false;
 
-void driver_es8311_init(void) {
+bool driver_es8311_init(void) {
   pinMode(AP_ENABLE, OUTPUT);
   digitalWrite(AP_ENABLE, LOW);
 
@@ -87,7 +88,8 @@ void driver_es8311_init(void) {
     .dma_buf_len = 256,
     .use_apll = false
   };
-  if (i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL) != ESP_OK) {
+  bool ok = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL) == ESP_OK;
+  if (!ok) {
     Serial.println("Failed to initialize I2S bus!");
   }
   i2s_pin_config_t pin_config = {
@@ -98,6 +100,7 @@ void driver_es8311_init(void) {
     .data_in_num = I2S_DINT
   };
   i2s_set_pin(I2S_NUM_0, &pin_config);
+  return ok;
 }
 
 void setup() {
@@ -118,7 +121,7 @@ void setup() {
     Serial.println("SD card does not exist -- continuing without one.");
   }
 
-  driver_es8311_init();
+  g_i2s_ok = driver_es8311_init();
   if (es8311_codec_init() != ESP_OK) {
     Serial.println("ES8311 init failed!");
     return;
@@ -146,4 +149,19 @@ void setup() {
 
 void loop() {
   audio.loop();
+
+  // This board's native USB CDC port drops and re-enumerates on every
+  // reset, so any log tool that connects even slightly late misses
+  // setup()'s one-time boot prints entirely and shows nothing at all
+  // (no reset needed to reproduce -- just being a moment late is enough).
+  // A periodic status line means connecting at any time, no reset race
+  // required, still shows current state within a couple seconds.
+  static uint32_t last_status = 0;
+  if (millis() - last_status >= 2000) {
+    last_status = millis();
+    Serial.printf("status: i2s=%s playing=%s vol=%d\n",
+                  g_i2s_ok ? "ok" : "FAILED",
+                  audio.isRunning() ? "yes" : "no",
+                  audio.getVolume());
+  }
 }

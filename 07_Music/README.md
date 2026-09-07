@@ -54,6 +54,18 @@ identical codec/volume settings. Fixed by calling `SD_MMC.begin()` once,
 matching `17_Lvgl_Music`'s `driver_sdmmc.cpp`, which already gets this
 right.
 
+## Periodic status line for debugging
+
+This board's native USB CDC port drops and re-enumerates on every reset,
+so any log tool (this project's own flasher included, and ESP Web
+Tools/ESPHome's) that connects even slightly late after a reset misses
+`setup()`'s one-time boot prints entirely and shows nothing — no actual
+reset needed to reproduce this, just connecting a moment late is enough.
+To sidestep that race for debugging, `loop()` prints a status line every
+2 seconds — `status: i2s=<ok|FAILED> playing=<yes|no> vol=<n>` — so
+connecting a serial monitor at any time, no reset timing required, still
+shows current state within a couple seconds.
+
 ## Volume
 
 Default volume is set to **21** (max, of 0–21) in `setup()`.
