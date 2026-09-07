@@ -118,7 +118,12 @@ els.chapterSelect.addEventListener("change", async () => {
 
   setChapterStatus("Fetching firmware…");
   try {
-    const res = await fetch(binPath);
+    // no-store: firmware files get overwritten in place under the same
+    // filename as chapters are rebuilt, so a browser-cached response
+    // (this repo's GitHub Pages sends Cache-Control: max-age=600) can
+    // silently serve stale/buggy firmware for up to 10 minutes after a fix
+    // is pushed and already live on the server.
+    const res = await fetch(binPath, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const buf = await res.arrayBuffer();
     firmwareData = new Uint8Array(buf);
