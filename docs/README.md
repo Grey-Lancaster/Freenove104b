@@ -26,3 +26,7 @@ python -m esptool --chip esp32s3 merge-bin \
 **Always use `keep`/`keep`/`keep`, never hardcode `--flash-mode`.** This board's octal PSRAM shares pins with the flash bus in a way that requires **DIO** flash mode specifically — pio's own build already bakes the right mode into `bootloader.bin`/`firmware.bin`'s image headers, but `merge-bin` will happily overwrite that if you pass explicit `--flash-mode qio` (or anything other than `keep`). The result boots into an instant, silent watchdog-reset loop before any of our own code (or even the second-stage bootloader's own log line) prints anything, because the ROM's first flash read after `ets_loader.c` already fails. Verify with `esptool image-info <merged-bin>` and confirm `Flash mode: DIO` before shipping a new chapter's `.bin`.
 
 Built so far: `01_SerialRW`, `07_Music`, `17_Lvgl_Music`. 20 chapters remain.
+
+## Testing a just-pushed firmware fix
+
+GitHub Pages sends `Cache-Control: max-age=600` on files under `firmware/`. `app.js` fetches with `cache: "no-store"` specifically so re-testing a chapter you already picked in the last 10 minutes doesn't silently serve the stale `.bin` from your own browser cache instead of the fix you just pushed — if you ever see old behavior right after a redeploy, hard-refresh the page (or check with `curl -sI .../firmware/<chapter>.bin` for `X-Cache: HIT` vs the file's actual hash) before assuming the fix didn't work.
