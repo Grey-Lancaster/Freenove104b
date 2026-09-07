@@ -294,6 +294,13 @@ async function startLogStream() {
     logTransport.setDeviceLostCallback(() => stopLogStream());
 
     logLine("--- Viewing device logs (115200 baud) ---");
+    // Reset here, now that we're actually listening, rather than relying on
+    // the reset already triggered by the flash step: re-enumerating this
+    // board's native USB CDC port takes long enough that a boot's one-time
+    // startup prints can finish and vanish before this reconnect completes,
+    // making it look like there's no log output at all.
+    logLine("--- Resetting so the boot log isn't missed ---");
+    await pulseReset(logTransport);
     const decoder = new TextDecoder();
     await logTransport.rawRead((data) => {
       els.log.textContent += decoder.decode(data);
@@ -326,14 +333,19 @@ async function stopLogStream() {
 }
 
 // Same reset pulse used after flashing: assert EN low, hold briefly, release.
-// Done while the log stream stays open, so the reboot's console output
-// shows up live.
+async function pulseReset(transport) {
+  await transport.setRTS(true);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await transport.setRTS(false);
+}
+
+// Manual re-trigger, e.g. to replay the boot log without reflashing. Done
+// while the log stream stays open, so the reboot's console output shows up
+// live.
 async function resetDevice() {
   if (!logTransport) return;
   logLine("--- Reset ---");
-  await logTransport.setRTS(true);
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  await logTransport.setRTS(false);
+  await pulseReset(logTransport);
 }
 
 els.viewLogsBtn.addEventListener("click", startLogStream);
