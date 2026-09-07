@@ -103,23 +103,19 @@ void driver_es8311_init(void) {
 void setup() {
   Serial.begin(115200);
 
-  //SD card init -- bounded retry, not infinite: if no card is present at
-  // all, we still want to fall through to the embedded SPIFFS fallback
-  // track in demo_music() rather than hang here forever.
+  // Single attempt, not a retry loop: calling SD_MMC.begin() again after a
+  // failure leaks/exhausts a GDMA channel on this chip (SDMMC and I2S draw
+  // from the same small shared pool), which then makes the codec's
+  // i2s_driver_install() fail below ("Failed to initialize I2S bus!") --
+  // silently degrading playback even with no SD card involved in that
+  // failure at all. 17_Lvgl_Music's driver_sdmmc.cpp already gets this
+  // right with a single SD_MMC.begin() call and no retry.
   if (!SD_MMC.setPins(SD_SCK, SD_CMD, SD_D0, SD_D1, SD_D2, SD_D3)) {
     Serial.println("Pin change failed!");
     return;
   }
-  bool sd_ready = false;
-  for (int attempt = 0; attempt < 10 && !sd_ready; attempt++) {
-    sd_ready = SD_MMC.begin();
-    if (!sd_ready) {
-      Serial.println("SD card does not exist, please insert SD card.");
-      delay(100);
-    }
-  }
-  if (!sd_ready) {
-    Serial.println("No SD card found after retrying -- continuing without one.");
+  if (!SD_MMC.begin()) {
+    Serial.println("SD card does not exist -- continuing without one.");
   }
 
   driver_es8311_init();
