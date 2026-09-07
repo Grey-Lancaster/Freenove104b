@@ -275,10 +275,30 @@ els.clearLogBtn.addEventListener("click", () => {
 
 // --- Device logs ---
 // Reopens the same already-authorized port (no picker dialog) to stream
-// its console output, the way ESP Web Tools' "Logs" step does. The COM
-// port renumbers between bootloader mode and running-app mode on this
-// board (native USB CDC), so this deliberately reopens rather than
-// reusing any handle held during flashing.
+// its console output, the way ESP Web Tools' "Logs" step does. This board
+// uses native USB CDC -- the chip's own USB peripheral resets along with
+// the chip itself, unlike a board with a separate UART bridge chip (which
+// stays connected to the PC through a target reset) -- so every reset
+// drops the port and it re-enumerates a moment later. That means we can
+// never "stay connected through a reset"; we can only reconnect
+// afterward, and how long that takes varies, so this retries for a while
+// instead of trying once after a fixed delay.
+async function openLogTransport(timeoutMs = 8000, intervalMs = 150) {
+  const deadline = Date.now() + timeoutMs;
+  let lastErr;
+  while (Date.now() < deadline) {
+    try {
+      const t = new Transport(device, true);
+      await t.connect(115200);
+      return t;
+    } catch (err) {
+      lastErr = err;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  throw lastErr || new Error("Timed out waiting for the device to reappear");
+}
+
 async function startLogStream() {
   if (!device) return;
 
@@ -287,20 +307,20 @@ async function startLogStream() {
   els.stopLogsBtn.classList.remove("hidden");
   els.connectBtn.disabled = true;
 
+  let myTransport;
   try {
-    logTransport = new Transport(device, true);
-    await logTransport.connect(115200);
+    logLine("--- Reconnecting for device logs... ---");
+    myTransport = await openLogTransport();
+    logTransport = myTransport;
     logStreamClosed = false;
-    logTransport.setDeviceLostCallback(() => stopLogStream());
+    // Guard against a stale callback from a *previous* logTransport
+    // (e.g. one killed by resetDevice()'s own reset pulse) tearing down
+    // whatever we just reconnected to here.
+    logTransport.setDeviceLostCallback(() => {
+      if (logTransport === myTransport) stopLogStream();
+    });
 
     logLine("--- Viewing device logs (115200 baud) ---");
-    // Reset here, now that we're actually listening, rather than relying on
-    // the reset already triggered by the flash step: re-enumerating this
-    // board's native USB CDC port takes long enough that a boot's one-time
-    // startup prints can finish and vanish before this reconnect completes,
-    // making it look like there's no log output at all.
-    logLine("--- Resetting so the boot log isn't missed ---");
-    await pulseReset(logTransport);
     const decoder = new TextDecoder();
     await logTransport.rawRead((data) => {
       els.log.textContent += decoder.decode(data);
@@ -309,10 +329,9 @@ async function startLogStream() {
   } catch (err) {
     if (!logStreamClosed) logLine(`Log stream error: ${err.message || err}`);
   } finally {
-    // Whether it ran fine and stopped, or failed outright (e.g. the port
-    // was grabbed by a reconnect attempt in the meantime), always leave
-    // the controls in a clean, usable state.
-    await stopLogStream();
+    if (logTransport === myTransport) {
+      await stopLogStream();
+    }
   }
 }
 
@@ -339,13 +358,21 @@ async function pulseReset(transport) {
   await transport.setRTS(false);
 }
 
-// Manual re-trigger, e.g. to replay the boot log without reflashing. Done
-// while the log stream stays open, so the reboot's console output shows up
-// live.
+// Manual re-trigger, e.g. to replay the boot log without reflashing. The
+// reset pulse itself drops the current connection immediately (see the
+// note above openLogTransport) -- so rather than assuming the existing
+// stream survives, this deliberately reconnects afterward via
+// startLogStream()'s retry loop.
 async function resetDevice() {
   if (!logTransport) return;
   logLine("--- Reset ---");
-  await pulseReset(logTransport);
+  try {
+    await pulseReset(logTransport);
+  } catch {
+    // Expected: the port is usually already gone by the time this
+    // returns, since the chip's USB peripheral just reset too.
+  }
+  startLogStream();
 }
 
 els.viewLogsBtn.addEventListener("click", startLogStream);
