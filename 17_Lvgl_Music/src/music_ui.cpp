@@ -1,6 +1,8 @@
 #include "music_ui.h"
 #include "Audio.h"
 #include "lv_img.h"
+#include "SPIFFS.h"
+#include "olive_mp3.h"
 
 #if defined FNK0104N_3P5_320x480_ST77922
   #define MUSIC_FOLDER     "/music"
@@ -23,6 +25,79 @@ int music_index_num = 1;      //index number of the music
 Audio audio;
 int music_task_flag = 0;       //music thread running flag
 TaskHandle_t musicTaskHandle;  //music thread task handle
+
+static bool using_spiffs_fallback = false;
+static const char *FALLBACK_LABEL_TEXT = "No files found on SD card - playing local file";
+
+// Writes the embedded Olive.mp3 to SPIFFS on first boot (or after SPIFFS gets
+// reformatted) so it can be played the same way as any SD-card file, via
+// audio.connecttoFS(). Skips the write if it's already there.
+static bool ensure_fallback_on_spiffs(void)
+{
+    if (!SPIFFS.begin(true)) // true = format on mount failure
+    {
+        Serial.println("SPIFFS mount failed");
+        return false;
+    }
+    if (SPIFFS.exists("/olive.mp3"))
+    {
+        return true;
+    }
+    File f = SPIFFS.open("/olive.mp3", FILE_WRITE);
+    if (!f)
+    {
+        Serial.println("Failed to open /olive.mp3 on SPIFFS for writing");
+        return false;
+    }
+    size_t written = f.write(olive_mp3, olive_mp3_len);
+    f.close();
+    if (written != olive_mp3_len)
+    {
+        Serial.println("Failed to fully write embedded fallback track to SPIFFS");
+        SPIFFS.remove("/olive.mp3");
+        return false;
+    }
+    Serial.println("Wrote embedded fallback track to SPIFFS: /olive.mp3");
+    return true;
+}
+
+// Called once at startup: if the SD card's music folder has no files (or
+// there's no SD card at all), fall back to the embedded track on SPIFFS.
+static void init_track_source(void)
+{
+    if (read_file_num(MUSIC_FOLDER) == 0 && ensure_fallback_on_spiffs())
+    {
+        using_spiffs_fallback = true;
+        music_index_num = 0;
+    }
+}
+
+// Number of playable tracks: the SD card's music folder, or 1 once we've
+// fallen back to the embedded track.
+static int music_track_count(void)
+{
+    return using_spiffs_fallback ? 1 : read_file_num(MUSIC_FOLDER);
+}
+
+// Bare filename for a track index -- SD card entry, or the fallback name.
+static String music_track_name(int index)
+{
+    return using_spiffs_fallback ? String("olive.mp3") : get_file_name_by_index(MUSIC_FOLDER, index);
+}
+
+// Builds the full path to hand to audio.connecttoFS(): SPIFFS root for the
+// fallback track, MUSIC_FOLDER on the SD card otherwise.
+static void music_track_path(const char *name, char *out, size_t out_size)
+{
+    if (using_spiffs_fallback)
+    {
+        snprintf(out, out_size, "/%s", name);
+    }
+    else
+    {
+        snprintf(out, out_size, "%s/%s", MUSIC_FOLDER, name);
+    }
+}
 
 //Click the logo icon, callback function: goes to the main ui interface
 static void music_imgbtn_home_event_handler(lv_event_t *e) {
@@ -66,16 +141,15 @@ static void music_imgbtn_left_event_handler(lv_event_t *e) {
         Serial.println("Play the last song.");
         music_index_num--;
         if (music_index_num < 0)
-          music_index_num = read_file_num(MUSIC_FOLDER)-1;
+          music_index_num = music_track_count()-1;
         stop_music_task();
         lv_img_set_src(guider_music_ui.music_imgbtn_play, &img_pause);
         music_button_state = 0;
-        String music_name = get_file_name_by_index(MUSIC_FOLDER, music_index_num);
-        music_set_label_text(music_name.c_str());
+        String music_name = music_track_name(music_index_num);
+        music_set_label_text(using_spiffs_fallback ? FALLBACK_LABEL_TEXT : music_name.c_str());
         if(music_name!=""){
-          char buf_music_path[255] = {MUSIC_FOLDER};
-          strcat(buf_music_path, "/");
-          strcat(buf_music_path, music_name.c_str());
+          char buf_music_path[255];
+          music_track_path(music_name.c_str(), buf_music_path, sizeof(buf_music_path));
           Serial.println(buf_music_path);
           music_load_mp3(buf_music_path);
           start_music_task();
@@ -102,19 +176,18 @@ static void music_imgbtn_right_event_handler(lv_event_t *e) {
       {
         Serial.println("Play the next song.");
         music_index_num++;
-        if (music_index_num >= read_file_num(MUSIC_FOLDER))
+        if (music_index_num >= music_track_count())
           music_index_num = 0;
 
         stop_music_task();
         lv_img_set_src(guider_music_ui.music_imgbtn_play, &img_pause);
         music_button_state = 0;
-        String music_name = get_file_name_by_index(MUSIC_FOLDER, music_index_num);
-        music_set_label_text(music_name.c_str());
+        String music_name = music_track_name(music_index_num);
+        music_set_label_text(using_spiffs_fallback ? FALLBACK_LABEL_TEXT : music_name.c_str());
         if(music_name!="")
         {
-          char buf_music_path[255] = {MUSIC_FOLDER};
-          strcat(buf_music_path, "/");
-          strcat(buf_music_path, music_name.c_str());
+          char buf_music_path[255];
+          music_track_path(music_name.c_str(), buf_music_path, sizeof(buf_music_path));
           Serial.println(buf_music_path);
           music_load_mp3(buf_music_path);
           start_music_task();
@@ -151,13 +224,12 @@ static void music_imgbtn_play_event_handler(lv_event_t *e) {
           music_pause_resume();
         } else {                     
           /*If there is no music thread currently, load the music name first, and then create the audio thread*/
-          String music_name = get_file_name_by_index(MUSIC_FOLDER, music_index_num);
-          music_set_label_text(music_name.c_str());
+          String music_name = music_track_name(music_index_num);
+          music_set_label_text(using_spiffs_fallback ? FALLBACK_LABEL_TEXT : music_name.c_str());
           if(music_name!="")
           {
-            char buf_music_path[255] = {MUSIC_FOLDER};
-            strcat(buf_music_path, "/");
-            strcat(buf_music_path, music_name.c_str());
+            char buf_music_path[255];
+            music_track_path(music_name.c_str(), buf_music_path, sizeof(buf_music_path));
             Serial.println(buf_music_path);
             music_load_mp3(buf_music_path);
             start_music_task();
@@ -207,6 +279,7 @@ static void music_slider_change_event_handler(lv_event_t * e){
 //Parameter configuration function on the music screen
 void setup_scr_music(lvgl_music_ui *ui) {
   music_iis_init();
+  init_track_source();
   ui->music = lv_obj_create(NULL);
   lv_obj_clear_flag(ui->music, LV_OBJ_FLAG_SCROLLABLE); 
   lv_coord_t screen_width = lv_obj_get_width(ui->music);    // Get screen width
@@ -269,8 +342,8 @@ void setup_scr_music(lvgl_music_ui *ui) {
     lv_obj_set_pos(ui->music_label, 40, 180);
     lv_obj_set_size(ui->music_label, 160, 20);
   #endif
-  String music_name = get_file_name_by_index(MUSIC_FOLDER, music_index_num);
-  music_set_label_text(music_name.c_str());
+  String music_name = music_track_name(music_index_num);
+  music_set_label_text(using_spiffs_fallback ? FALLBACK_LABEL_TEXT : music_name.c_str());
   lv_label_set_long_mode(ui->music_label, LV_LABEL_LONG_SCROLL_CIRCULAR );
   lv_obj_set_style_text_align(ui->music_label, LV_TEXT_ALIGN_CENTER, 0);
 
@@ -336,6 +409,20 @@ void setup_scr_music(lvgl_music_ui *ui) {
   lv_obj_add_event_cb(ui->music_imgbtn_play, music_imgbtn_play_event_handler, LV_EVENT_ALL, NULL);
   lv_obj_add_event_cb(ui->music_imgbtn_stop, music_imgbtn_stop_event_handler, LV_EVENT_ALL, NULL);
   lv_obj_add_event_cb(ui->music_slider_valume, music_slider_change_event_handler, LV_EVENT_ALL, NULL);
+
+  // The label already says "...playing local file" for the fallback case,
+  // so actually start playing it rather than waiting for a press of the
+  // play button.
+  if (using_spiffs_fallback && music_name != "")
+  {
+    char buf_music_path[255];
+    music_track_path(music_name.c_str(), buf_music_path, sizeof(buf_music_path));
+    Serial.println(buf_music_path);
+    music_load_mp3(buf_music_path);
+    start_music_task();
+    lv_img_set_src(ui->music_imgbtn_play, &img_playing);
+    music_button_state = 1;
+  }
 }
 
 //Set the label display content
@@ -410,7 +497,17 @@ int music_task_is_running(void) {
 
 //Initialize the audio interface
 int music_iis_init(void) {
-  return audio.setPinout(AUDIO_I2S_BCK, AUDIO_I2S_WS, AUDIO_I2S_DOUT, AUDIO_I2S_MCK);
+  // setPinout's 4th positional parameter is DIN (mic input), not MCK -- see
+  // Audio.h: setPinout(BCLK, LRC, DOUT, DIN = I2S_PIN_NO_CHANGE, MCK =
+  // I2S_PIN_NO_CHANGE). Passing AUDIO_I2S_MCK positionally as the 4th arg
+  // (as Freenove's original tutorial code does) actually leaves the real
+  // MCK at its default of "no change", so the codec never gets a real
+  // MCLK signal. The sibling `translate` project independently confirmed
+  // this exact codec needs a real MCLK on this pin for the speaker (mic
+  // still works without it, which is why codec init reports success even
+  // when the speaker is silent). DIN isn't wired up via this library here,
+  // so it's left at I2S_PIN_NO_CHANGE and MCK is passed explicitly instead.
+  return audio.setPinout(AUDIO_I2S_BCK, AUDIO_I2S_WS, AUDIO_I2S_DOUT, I2S_PIN_NO_CHANGE, AUDIO_I2S_MCK);
 }
 //Set the volume: 0-21
 void music_set_volume(int volume) {
@@ -422,7 +519,11 @@ int music_read_volume(void) {
 }
 //load the mp3
 void music_load_mp3(char *name) {
-  audio.connecttoFS(SD_MMC, name);
+  if (using_spiffs_fallback) {
+    audio.connecttoFS(SPIFFS, name);
+  } else {
+    audio.connecttoFS(SD_MMC, name);
+  }
 }
 //Pause/play the music
 void music_pause_resume(void) {
