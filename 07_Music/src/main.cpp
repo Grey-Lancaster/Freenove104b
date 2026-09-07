@@ -128,8 +128,18 @@ void setup() {
     return;
   }
   //audio init
-  audio.setPinout(I2S_BCK, I2S_WS, I2S_DOUT, I2S_MCK);
-  audio.setVolume(10);
+  // setPinout's 4th positional parameter is DIN (mic input), not MCK -- see
+  // Audio.h: setPinout(BCLK, LRC, DOUT, DIN = I2S_PIN_NO_CHANGE, MCK =
+  // I2S_PIN_NO_CHANGE). Passing I2S_MCK positionally as the 4th arg (as
+  // Freenove's original tutorial code does) actually leaves the real MCK at
+  // its default of "no change", so the codec never gets a real MCLK
+  // signal. The sibling `translate` project independently confirmed this
+  // exact codec needs a real MCLK on this pin for the speaker (mic still
+  // works without it, which is why codec init reports success even when
+  // the speaker is silent). DIN isn't wired up via this library here, so
+  // it's left at I2S_PIN_NO_CHANGE and MCK is passed explicitly instead.
+  audio.setPinout(I2S_BCK, I2S_WS, I2S_DOUT, I2S_PIN_NO_CHANGE, I2S_MCK);
+  audio.setVolume(19);
   if (!demo_music()) {
     return;
   }
