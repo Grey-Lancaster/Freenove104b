@@ -1,5 +1,7 @@
 // Converted from Sketch_07.1_Music.ino (Freenove FNK0104B tutorial, chapter 7.1)
-// Requires an SD card (SD_MMC) with .mp3 files in the root directory.
+// Plays .mp3 files from the root of an SD card (SD_MMC) if one is present
+// with any; otherwise falls back to a single embedded track (Olive.mp3,
+// baked into the firmware via olive_mp3.h) written to SPIFFS on first boot.
 #include <Arduino.h>
 #include "FS.h"
 #include "SD_MMC.h"
@@ -101,14 +103,23 @@ void driver_es8311_init(void) {
 void setup() {
   Serial.begin(115200);
 
-  //SD card init
+  //SD card init -- bounded retry, not infinite: if no card is present at
+  // all, we still want to fall through to the embedded SPIFFS fallback
+  // track in demo_music() rather than hang here forever.
   if (!SD_MMC.setPins(SD_SCK, SD_CMD, SD_D0, SD_D1, SD_D2, SD_D3)) {
     Serial.println("Pin change failed!");
     return;
   }
-  while (!SD_MMC.begin()) {
-    Serial.println("SD card does not exist,please insert SD card.");
-    delay(100);
+  bool sd_ready = false;
+  for (int attempt = 0; attempt < 10 && !sd_ready; attempt++) {
+    sd_ready = SD_MMC.begin();
+    if (!sd_ready) {
+      Serial.println("SD card does not exist, please insert SD card.");
+      delay(100);
+    }
+  }
+  if (!sd_ready) {
+    Serial.println("No SD card found after retrying -- continuing without one.");
   }
 
   driver_es8311_init();
@@ -124,7 +135,7 @@ void setup() {
   }
 
   //play music
-  demo_music_play(1);
+  demo_music_play(0);
 }
 
 void loop() {
