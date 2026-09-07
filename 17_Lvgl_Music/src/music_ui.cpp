@@ -333,6 +333,11 @@ void setup_scr_music(lvgl_music_ui *ui) {
   lv_slider_set_mode(ui->music_slider_valume, LV_SLIDER_MODE_NORMAL);
   lv_slider_set_range(ui->music_slider_valume, 0, 21);
   lv_slider_set_value(ui->music_slider_valume, 10, LV_ANIM_OFF);
+  // lv_slider_set_value() only moves the widget -- it doesn't fire the
+  // slider's value-changed event, so without this the codec is left at
+  // Audio's uninitialized default (m_vol=64, i.e. max) until the user
+  // actually drags the slider, despite it visually reading 10.
+  music_set_volume(10);
 
   ui->music_label = lv_label_create(ui->music);
   #if defined (FNK0104N_3P5_320x480_ST77922) || defined (FNK0104S_4P0_320x480_ST7796)

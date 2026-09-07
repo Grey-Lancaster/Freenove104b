@@ -139,7 +139,7 @@ void setup() {
   // the speaker is silent). DIN isn't wired up via this library here, so
   // it's left at I2S_PIN_NO_CHANGE and MCK is passed explicitly instead.
   audio.setPinout(I2S_BCK, I2S_WS, I2S_DOUT, I2S_PIN_NO_CHANGE, I2S_MCK);
-  audio.setVolume(19);
+  audio.setVolume(21); // max (volumetable maxes out at index 21 -> gain 64)
   if (!demo_music()) {
     return;
   }
