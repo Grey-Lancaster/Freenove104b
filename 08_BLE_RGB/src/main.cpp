@@ -4,7 +4,6 @@
 #include "BLEServer.h"
 #include "BLEUtils.h"
 #include "BLE2902.h"
-#include "String.h"
 #include "Freenove_WS2812_Lib_for_ESP32.h"
 
 BLECharacteristic *pCharacteristic;

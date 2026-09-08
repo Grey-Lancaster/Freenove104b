@@ -4,7 +4,6 @@
 #include "BLEServer.h"
 #include "BLEUtils.h"
 #include "BLE2902.h"
-#include "String.h"
 
 BLECharacteristic *pCharacteristic;
 bool deviceConnected = false;
