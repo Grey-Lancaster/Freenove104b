@@ -3,7 +3,7 @@ import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.
 // ---- Personalize this page by editing the values below ----
 const CONFIG = {
   title: "Freenove104b Touch Tutorial Flasher",
-  subtitle: "Pick a tutorial chapter and flash it straight from this page. No software to install.",
+  subtitle: "Pick a firmware and flash it straight from this page. No software to install.",
   footerNote:
     'Built with <a href="https://github.com/espressif/esptool-js" target="_blank" rel="noopener">esptool-js</a>. ' +
     'Chapter source: <a href="https://github.com/Grey-Lancaster/Freenove104b" target="_blank" rel="noopener">Freenove104b</a>.',

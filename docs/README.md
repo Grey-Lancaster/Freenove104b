@@ -25,7 +25,11 @@ python -m esptool --chip esp32s3 merge-bin \
 
 **Always use `keep`/`keep`/`keep`, never hardcode `--flash-mode`.** This board's octal PSRAM shares pins with the flash bus in a way that requires **DIO** flash mode specifically — pio's own build already bakes the right mode into `bootloader.bin`/`firmware.bin`'s image headers, but `merge-bin` will happily overwrite that if you pass explicit `--flash-mode qio` (or anything other than `keep`). The result boots into an instant, silent watchdog-reset loop before any of our own code (or even the second-stage bootloader's own log line) prints anything, because the ROM's first flash read after `ets_loader.c` already fails. Verify with `esptool image-info <merged-bin>` and confirm `Flash mode: DIO` before shipping a new chapter's `.bin`.
 
-All 23 chapters are built and flashable.
+All 24 chapters (23 official + the unofficial `17_Lvgl_Echo`) are built and flashable.
+
+## XiaoZhi AI Voice Assistant
+
+`firmware/xiaozhi.bin` isn't a Touch Tutorial chapter — it's a straight copy of `xiaozhi/firmware/merged-binary.bin` (see that folder's own README), Grey's from-source ESP-IDF build of the stock XiaoZhi voice assistant for this board. Already a single merged image (DIO verified), so no `merge-bin` step is needed here — just copy the file over whenever `xiaozhi/firmware/merged-binary.bin` gets rebuilt, and update the `data-bin` path in `index.html` if the filename ever changes.
 
 ## Testing a just-pushed firmware fix
 
