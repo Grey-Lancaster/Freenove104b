@@ -57,14 +57,6 @@ let esploader = null;
 let device = null;
 let logTransport = null;
 let logStreamClosed = true;
-let autoLogTimer = null;
-
-function cancelAutoLogTimer() {
-  if (autoLogTimer) {
-    clearTimeout(autoLogTimer);
-    autoLogTimer = null;
-  }
-}
 
 function logLine(str) {
   els.log.textContent += str + "\n";
@@ -144,7 +136,6 @@ els.connectBtn.disabled = false;
 async function connectDevice() {
   try {
     els.connectBtn.disabled = true;
-    cancelAutoLogTimer();
 
     if (logTransport) {
       await stopLogStream();
@@ -203,7 +194,6 @@ els.connectErrorRetryBtn.addEventListener("click", () => {
 // --- Flash ---
 els.flashBtn.addEventListener("click", async () => {
   if (!firmwareData || !esploader) return;
-  cancelAutoLogTimer();
 
   const confirmMessage =
     "This will fully erase and reflash the board with the selected " +
@@ -231,17 +221,20 @@ els.flashBtn.addEventListener("click", async () => {
       },
     });
 
-    logLine("Flash complete. Resetting device...");
-    // Force the chip into reset, then release via its proper reset
-    // procedure, then close the port. Leaving the port open after
-    // release can leave DTR/RTS parked in a state that keeps some
-    // boards from booting until they're power-cycled.
-    await transport.setRTS(true);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await esploader.after();
+    logLine("Flash complete.");
+    // Try the standard RTS/DTR auto-reset -- harmless if it works, but this
+    // board has no auto-reset circuit wired to EN/IO0 (confirmed: even this
+    // exact sequence doesn't bring it out of bootloader mode), so don't
+    // count on it or block on it.
+    try {
+      await transport.setRTS(true);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await esploader.after();
+    } catch {
+      // ignored -- see above
+    }
     await transport.disconnect();
 
-    logLine("Done! Your device is rebooting.");
     els.progressLabel.textContent = "Done!";
 
     transport = null;
@@ -249,14 +242,8 @@ els.flashBtn.addEventListener("click", async () => {
     setConnectStatus("Disconnected", "");
     els.connectBtn.textContent = "Connect Device";
 
-    // Give the board a moment to actually boot, then jump straight to
-    // its console output so you don't have to reconnect manually. If you
-    // click Connect or Flash again before this fires, it gets cancelled.
+    logLine("Press the board's RESET button now, then click \"View Device Logs\" below to watch it boot.");
     els.viewLogsBtn.classList.remove("hidden");
-    autoLogTimer = setTimeout(() => {
-      autoLogTimer = null;
-      startLogStream();
-    }, 500);
   } catch (err) {
     console.error(err);
     logLine(`Error: ${err.message || err}`);
@@ -281,9 +268,12 @@ els.clearLogBtn.addEventListener("click", () => {
 // stays connected to the PC through a target reset) -- so every reset
 // drops the port and it re-enumerates a moment later. That means we can
 // never "stay connected through a reset"; we can only reconnect
-// afterward, and how long that takes varies, so this retries for a while
-// instead of trying once after a fixed delay.
-async function openLogTransport(timeoutMs = 8000, intervalMs = 150) {
+// afterward, and how long that takes varies -- and since this board needs
+// a physical RESET button press rather than a software reset (see
+// resetDevice() below), the caller may need real time to actually walk
+// over and press it -- so this retries for a while instead of trying once
+// after a fixed delay.
+async function openLogTransport(timeoutMs = 20000, intervalMs = 150) {
   const deadline = Date.now() + timeoutMs;
   let lastErr;
   while (Date.now() < deadline) {
@@ -363,33 +353,17 @@ async function stopLogStream() {
   els.connectBtn.disabled = false;
 }
 
-// Same reset pulse used after flashing: assert EN low, hold briefly, release.
-async function pulseReset(transport) {
-  await transport.setRTS(true);
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  await transport.setRTS(false);
-}
-
-// Manual re-trigger, e.g. to replay the boot log without reflashing. The
-// reset pulse itself drops the current connection immediately (see the
-// note above openLogTransport) -- so rather than assuming the existing
-// stream survives, this deliberately reconnects afterward via
-// startLogStream()'s retry loop.
+// This board has no auto-reset circuit wired to EN/IO0 -- the standard
+// RTS/DTR toggle esptool-js and esptool.py both use to reset ESP32 boards
+// doesn't do anything here (confirmed: even after a successful flash, it
+// stays in bootloader mode until the physical RESET button is pressed).
+// So rather than pretend a software reset pulse works, this just releases
+// the current connection and waits for you to press the button yourself,
+// then reconnects once the board reappears.
 async function resetDevice() {
   if (!logTransport) return;
-  logLine("--- Reset ---");
+  logLine("--- Press the board's RESET button now... ---");
   const oldTransport = logTransport;
-  try {
-    await pulseReset(oldTransport);
-  } catch {
-    // Expected: the port is usually already gone by the time this
-    // returns, since the chip's USB peripheral just reset too.
-  }
-  // Explicitly release the port instead of waiting on the browser's own
-  // disconnect detection to notice and clean up -- that can lag behind
-  // this function returning, and the browser refuses to open a
-  // still-"open" SerialPort ("The port is already open"), even once the
-  // chip behind it has physically reset.
   try {
     await oldTransport.disconnect();
   } catch {
