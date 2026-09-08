@@ -27,9 +27,7 @@ python -m esptool --chip esp32s3 merge-bin \
 
 All 24 chapters (23 official + the unofficial `17_Lvgl_Echo`) are built and flashable.
 
-## XiaoZhi AI Voice Assistant
-
-`firmware/xiaozhi.bin` isn't a Touch Tutorial chapter — it's a straight copy of `xiaozhi/firmware/merged-binary.bin` (see that folder's own README), Grey's from-source ESP-IDF build of the stock XiaoZhi voice assistant for this board. Already a single merged image (DIO verified), so no `merge-bin` step is needed here — just copy the file over whenever `xiaozhi/firmware/merged-binary.bin` gets rebuilt, and update the `data-bin` path in `index.html` if the filename ever changes.
+**Don't add `xiaozhi/firmware/merged-binary.bin` here.** It was briefly added and then removed (2026-09-08): flashing it reconnects to Grey's own existing XiaoZhi agent ("Papa Lanc") on xiaozhi.me, since device activation is bound server-side to this specific board's hardware ID from earlier setup, not something scrubbed by rebuilding the binary. It also has the local-network OTA push token (`REDACTED-TOKEN`) hardcoded in plaintext. Neither is safe on a public page.
 
 ## Testing a just-pushed firmware fix
 

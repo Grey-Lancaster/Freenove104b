@@ -13,7 +13,7 @@
   <header class="hero">
     <img class="hero-icon" src="logo.png" alt="Freenove104b" />
     <h1 id="pageTitle">Freenove104b Touch Tutorial Flasher</h1>
-    <p id="pageSubtitle" class="subtitle">Pick a firmware and flash it straight from this page. No software to install.</p>
+    <p id="pageSubtitle" class="subtitle">Pick a tutorial chapter and flash it straight from this page. No software to install.</p>
   </header>
 
   <section id="unsupported" class="banner banner-warn hidden">
@@ -27,9 +27,9 @@
     <section class="card step">
       <div class="step-head">
         <span class="step-num">1</span>
-        <h2>Pick what to flash</h2>
+        <h2>Pick a chapter</h2>
       </div>
-      <p class="step-help">Each option is a standalone firmware &mdash; flashing one replaces whatever was on the board before.</p>
+      <p class="step-help">Each chapter is a standalone demo &mdash; flashing one replaces whatever was on the board before.</p>
 
       <select id="chapterSelect" class="chapter-select">
         <option value="" selected disabled>Choose a chapter&hellip;</option>
@@ -58,9 +58,6 @@
         <option value="17_Lvgl_Echo" data-bin="firmware/17_Lvgl_Echo.bin">17.2 &mdash; LVGL Mic Record + Playback (unofficial)</option>
         <option value="18_Lvgl_Multifunctionality" data-bin="firmware/18_Lvgl_Multifunctionality.bin">18.1 &mdash; All LVGL Screens Combined</option>
         <option value="19_LVGL_Arduino" data-bin="firmware/19_LVGL_Arduino.bin">19.1 &mdash; Stock LVGL Widgets Demo</option>
-        </optgroup>
-        <optgroup label="Other projects">
-        <option value="xiaozhi" data-bin="firmware/xiaozhi.bin">XiaoZhi AI Voice Assistant</option>
         </optgroup>
       </select>
       <p id="chapterStatus" class="step-help" style="margin-top: 10px; margin-bottom: 0;"></p>
