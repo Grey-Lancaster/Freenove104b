@@ -3,3 +3,11 @@ Freenove_ESP32_S3_Display-main.zip
 
 # PlatformIO build artifacts (every chapter folder has its own)
 .pio/
+
+# Built binaries for xiaozhi -- deliberately kept local-only (2026-09-08):
+# flashing merged-binary.bin reconnects to Grey's own XiaoZhi agent on
+# xiaozhi.me (device activation is bound server-side to this board's
+# hardware ID), and the OTA push token used to be hardcoded in it. Keep
+# these off GitHub; rebuild from xiaozhi-esp32-src instead of relying on
+# a committed copy.
+xiaozhi/firmware/

@@ -12,9 +12,10 @@ Freenove's prebuilt binaries (both the doc's `Upload_Xiaozhi_Bin` folder and the
 
 ## What's in this repo
 
-This repo holds Grey's own build artifacts and config for this board — not a vendored copy of Freenove's source (that lives at [github.com/Freenove/xiaozhi-esp32](https://github.com/Freenove/xiaozhi-esp32), forked from [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)).
+This repo holds Grey's own build config for this board — not a vendored copy of Freenove's source (that lives at [github.com/Freenove/xiaozhi-esp32](https://github.com/Freenove/xiaozhi-esp32), forked from [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)).
 
-- `firmware/` — the built binaries flashed to the board (`bootloader.bin`, `partition-table.bin`, `ota_data_initial.bin`, `srmodels.bin`, `xiaozhi.bin`, `merged-binary.bin`)
+**The built binaries are deliberately *not* committed here** (removed and purged from history 2026-09-08, see `.gitignore`): flashing `merged-binary.bin` reconnects to Grey's own XiaoZhi agent on xiaozhi.me — device activation is bound server-side to this specific board's hardware ID, not something a rebuild resets — and the OTA push token used to be hardcoded in it in plaintext. Rebuild locally into `firmware/` (gitignored) from `xiaozhi-esp32-src` instead of expecting a checked-in copy; see below for where that source lives.
+
 - `build-config/sdkconfig` — the exact resolved config used, with two fixes applied on top of Freenove's plain defaults:
   - `CONFIG_SR_WN_WN9S_HIESP=y` (wake word — plain default is the Mandarin `NIHAOXIAOZHI` model, not "Hi, ESP"; the "S" variant is a newer/smaller model that tested faster than the plain `WN9_HIESP`)
   - `CONFIG_LANGUAGE_EN_US=y` (system UI language — plain default is `ZH_CN`, causes Chinese notification/status text)
