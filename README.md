@@ -42,6 +42,7 @@ etc.) — see each chapter's source comments for specifics.
 | 15.1 | `15_Lvgl_Timer/` | LVGL chronograph/stopwatch UI |
 | 16.1 | `16_Lvgl_WS2812/` | LVGL-driven WS2812 color picker |
 | 17.1 | `17_Lvgl_Music/` | LVGL music player UI |
+| 17.2 | `17_Lvgl_Echo/` | LVGL mic record + playback (unofficial — not one of Freenove's 19, pairs with 07_Echo the way 17_Lvgl_Music pairs with 07_Music) |
 | 18.1 | `18_Lvgl_Multifunctionality/` | All LVGL screens combined into one app |
 | 19.1 | `19_LVGL_Arduino/` | Stock LVGL widgets demo |
 
