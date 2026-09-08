@@ -16,7 +16,7 @@
 // This is NOT real security (it ships in the compiled binary and can be
 // extracted) -- change it to something private before relying on it, and
 // don't expose this port outside your home network.
-#define OTA_PUSH_TOKEN "REDACTED-TOKEN"
+#define OTA_PUSH_TOKEN "544e9ffaa836ff3f3fa53e5f1e7557d2"
 
 OtaPushServer& OtaPushServer::GetInstance() {
     static OtaPushServer instance;

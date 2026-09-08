@@ -25,7 +25,7 @@ This repo holds Grey's own build artifacts and config for this board — not a v
 As of the push-OTA server (see `custom-source/`), updates after the initial flash don't need physical access to the board:
 
 ```bash
-curl -X POST -H "X-OTA-Token: REDACTED-TOKEN" --data-binary @firmware/xiaozhi.bin http://<device-ip>:8080/update
+curl -X POST -H "X-OTA-Token: <your-token-from-ota_push_server.cc>" --data-binary @firmware/xiaozhi.bin http://<device-ip>:8080/update
 ```
 
 Confirmed working end-to-end 2026-08-24. Only updates app code — a wake-word model change still needs a full manual flash.

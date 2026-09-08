@@ -19,7 +19,7 @@ Adds a local-network push-OTA endpoint, since the built-in `Ota` class (`main/ot
 **Usage** — device listens on port 8080. Push a new app binary (`xiaozhi.bin`, the plain app file — not `merged-binary.bin`) anytime it's on WiFi:
 
 ```bash
-curl -X POST -H "X-OTA-Token: REDACTED-TOKEN" --data-binary @xiaozhi.bin http://<device-ip>:8080/update
+curl -X POST -H "X-OTA-Token: <your-token-from-ota_push_server.cc>" --data-binary @xiaozhi.bin http://<device-ip>:8080/update
 ```
 
 Device writes it to the inactive OTA slot, verifies it, sets it as the boot partition, and reboots automatically — confirmed working end-to-end 2026-08-24.
