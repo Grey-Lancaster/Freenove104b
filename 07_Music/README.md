@@ -6,9 +6,8 @@ root of an SD card (`SD_MMC`) through the onboard ES8311 codec.
 ## No-SD-card fallback
 
 If no `.mp3` files are found on the SD card (or there's no card at all —
-`SD_MMC.begin()` is tried once and moves on rather than hanging forever,
-see the I2S bug below for why it's *only* tried once), the firmware falls
-back to a single track, **Olive.mp3**, baked directly
+`SD_MMC.begin()` is tried once and moves on rather than retrying in a
+loop, see below), the firmware falls back to a single track, **Olive.mp3**, baked directly
 into the binary (`src/olive_mp3.h`, generated via `xxd -i`, ~327KB) and
 written to SPIFFS on first boot. Playback then reads from SPIFFS instead
 of the SD card. This means the demo always plays *something* out of the
@@ -37,22 +36,49 @@ The sibling `translate` project ([github.com/Grey-Lancaster/translate](https://g
 independently hit and documented this same MCLK requirement for this
 exact ES8311/board combo.
 
-## Bug fixed: quiet/degraded audio from a failed I2S init
+## Bug fixed (real cause of quiet audio): wrong MCLK multiple for 16-bit audio
 
-Freenove's original tutorial code retries `SD_MMC.begin()` in a loop (up
-to 10 attempts) before setting up the codec's I2S bus. With no SD card
-inserted, every attempt fails — and on this chip, SDMMC and I2S draw from
-the same small shared pool of GDMA channels, so the repeated failed
-`SD_MMC.begin()` calls leak/exhaust one. By the time `driver_es8311_init()`
-calls `i2s_driver_install()` afterward, there's nothing left for it, and
-it fails outright (`Failed to initialize I2S bus!` in the serial log) —
-with no SD card involved in that failure at all. Whatever audio comes out
-afterward is running through a bus that never initialized correctly,
-which is why this chapter sounded noticeably quieter/weaker than
-`17_Lvgl_Music` even at a higher `setVolume()` value, despite both using
-identical codec/volume settings. Fixed by calling `SD_MMC.begin()` once,
-matching `17_Lvgl_Music`'s `driver_sdmmc.cpp`, which already gets this
-right.
+`es8311.h` had `EXAMPLE_MCLK_MULTIPLE` set to **384**, with a comment
+sitting right next to it saying *"if not using 24-bit data width, 256
+should be enough"* — this project uses 16-bit
+(`I2S_BITS_PER_SAMPLE_16BIT`), so 384 directly contradicted its own
+comment. This value feeds `es8311_codec_init()`'s clock-coefficient
+lookup, which programs the ES8311's internal DAC clock dividers over
+I2C — a mismatched ratio there leaves the codec's DAC running with the
+wrong internal filter/oversampling divider relative to what's actually
+clocked into it once playback starts, which cuts the effective output
+level substantially without showing up anywhere in software (volume
+readouts, `Serial` logs, `audio.isRunning()` all looked completely
+normal). `17_Lvgl_Music/src/es8311.h` already had the correct value
+(256) and was noticeably louder as a result even at a much lower
+`setVolume()`. Fixed by changing this chapter's value to match.
+
+Confirmed on hardware after ruling out several other suspects that
+turned out to be red herrings once actually tested side-by-side — worth
+knowing about since they're real fixes, just not the cause of *this*
+particular symptom:
+- The `SD_MMC.begin()` retry loop below is still a legitimate fix (single
+  attempt is simply more correct than retrying pointlessly with no card
+  present), but it turned out the `Failed to initialize I2S bus!` message
+  it was blamed for happens on *both* this chapter and `17_Lvgl_Music`
+  regardless — a harmless artifact of a redundant manual pre-init call
+  that the `Audio` library's own internal setup supersedes either way
+  (confirmed via the periodic status line below, added specifically to
+  get a reliable side-by-side comparison instead of guessing from a
+  single chapter's logs in isolation).
+- The digital volume fixes elsewhere in this README (bumping to 21,
+  fixing `17_Lvgl_Music`'s slider) are real and worth keeping, but with
+  the MCLK multiple wrong, no amount of digital gain could fully make up
+  for the codec-level attenuation.
+
+Freenove's original tutorial code also retries `SD_MMC.begin()` in a loop
+(up to 10 attempts) before setting up the codec's I2S bus, which is worth
+avoiding on its own merits even though it wasn't this bug's cause: with
+no SD card inserted, every attempt fails, and on this chip SDMMC and I2S
+draw from the same small shared pool of GDMA channels, so repeated failed
+`SD_MMC.begin()` calls can leak/exhaust one for no benefit. Fixed by
+calling `SD_MMC.begin()` once, matching `17_Lvgl_Music`'s
+`driver_sdmmc.cpp`, which already gets this right.
 
 ## Periodic status line for debugging
 

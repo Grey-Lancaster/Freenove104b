@@ -29,6 +29,7 @@ void music_set_label_text(const char *text);     //Set the label display content
 int music_iis_init(void);                  //Initialize the audio interface
 void music_set_volume(int volume);         //Set the volume: 0-21
 int music_read_volume(void);               //Query volume
+int music_is_playing(void);                //Query whether playback is active
 void music_load_mp3(char *name);           //load the mp3
 void music_pause_resume(void);             //Pause/play the music
 void music_stop(void);                     //Stop the music

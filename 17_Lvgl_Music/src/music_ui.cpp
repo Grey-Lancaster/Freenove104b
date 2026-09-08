@@ -522,6 +522,10 @@ void music_set_volume(int volume) {
 int music_read_volume(void) {
   return audio.getVolume();
 }
+//Query whether playback is active
+int music_is_playing(void) {
+  return audio.isRunning();
+}
 //load the mp3
 void music_load_mp3(char *name) {
   if (using_spiffs_fallback) {

@@ -88,9 +88,10 @@ bool driver_es8311_init(void) {
     .dma_buf_len = 256,
     .use_apll = false
   };
-  bool ok = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL) == ESP_OK;
+  esp_err_t install_err = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+  bool ok = install_err == ESP_OK;
   if (!ok) {
-    Serial.println("Failed to initialize I2S bus!");
+    Serial.printf("Failed to initialize I2S bus! err=%s (%d)\n", esp_err_to_name(install_err), install_err);
   }
   i2s_pin_config_t pin_config = {
     .mck_io_num = I2S_MCK,

@@ -26,8 +26,9 @@
 #define I2C_SPEED 400000  /*!< I2C master clock frequency */
 
 Display screen;
+static bool g_i2s_ok = false;
 
-void driver_es8311_init(void) {
+bool driver_es8311_init(void) {
   pinMode(AP_ENABLE, OUTPUT);
   digitalWrite(AP_ENABLE, LOW);
 
@@ -52,7 +53,8 @@ void driver_es8311_init(void) {
     .dma_buf_len = 256,
     .use_apll = false
   };
-  if (i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL) != ESP_OK) {
+  bool ok = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL) == ESP_OK;
+  if (!ok) {
     Serial.println("Failed to initialize I2S bus!");
   }
   i2s_pin_config_t pin_config = {
@@ -63,6 +65,7 @@ void driver_es8311_init(void) {
     .data_in_num = I2S_DINT
   };
   i2s_set_pin(I2S_NUM_0, &pin_config);
+  return ok;
 }
 
 void setup(){
@@ -71,7 +74,7 @@ void setup(){
 
    /*** Init drivers ***/
     sdmmc_init(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0, SD_MMC_D1, SD_MMC_D2, SD_MMC_D3);//Initialize the SD module
-    driver_es8311_init();
+    g_i2s_ok = driver_es8311_init();
     if (es8311_codec_init() != ESP_OK) {
       Serial.println("ES8311 init failed!");
       return;
@@ -93,4 +96,18 @@ void setup(){
 void loop(){
     screen.routine(); /* let the GUI do its work */
     delay( 5 );
+
+    // Same diagnostic heartbeat as 07_Music: this board's native USB CDC
+    // port drops and re-enumerates on every reset, so any log tool that
+    // connects even slightly late misses setup()'s one-time boot prints
+    // and shows nothing. A periodic status line means connecting at any
+    // time still shows current state within a couple seconds.
+    static uint32_t last_status = 0;
+    if (millis() - last_status >= 2000) {
+      last_status = millis();
+      Serial.printf("status: i2s=%s playing=%s vol=%d\n",
+                    g_i2s_ok ? "ok" : "FAILED",
+                    music_is_playing() ? "yes" : "no",
+                    music_read_volume());
+    }
 }

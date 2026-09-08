@@ -56,8 +56,22 @@ LVGL's value-changed event, which is what the slider's own handler
 *displayed* 10 but `audio.setVolume()` was never called at all, leaving
 the codec at `Audio`'s uninitialized class-member default of `m_vol = 64`
 — i.e. **max volume**, louder than even an explicit `setVolume(21)` —
-until the user actually dragged the slider once. This is why the demo
-played noticeably louder than `07_Music` despite the on-screen slider
-reading a lower number. Fixed by calling `music_set_volume(10)`
-immediately after the `lv_slider_set_value()` call so playback actually
-starts at what's displayed.
+until the user actually dragged the slider once. Fixed by calling
+`music_set_volume(10)` immediately after the `lv_slider_set_value()` call
+so playback actually starts at what's displayed. (This chapter also
+sounded louder than `07_Music` even after that fix — but that turned out
+to be a separate, larger bug in `07_Music` itself, a wrong codec MCLK
+multiple; see that chapter's README.)
+
+## Periodic status line for debugging
+
+Same addition as `07_Music`, for the same reason: this board's native USB
+CDC port drops and re-enumerates on every reset, so any log tool that
+connects even slightly late after a reset misses `setup()`'s one-time
+boot prints entirely and shows nothing — no actual reset needed to
+reproduce this, just connecting a moment late is enough. `loop()` prints
+`status: i2s=<ok|FAILED> playing=<yes|no> vol=<n>` every 2 seconds so
+connecting at any time still shows current state within a couple
+seconds. This is specifically what let us confirm, side-by-side with
+`07_Music`, that `i2s=FAILED` happens on both chapters and isn't actually
+the differentiator it initially looked like.

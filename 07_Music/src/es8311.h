@@ -23,7 +23,7 @@
 
 #define EXAMPLE_RECV_BUF_SIZE   (2400)
 #define EXAMPLE_SAMPLE_RATE     (16000)
-#define EXAMPLE_MCLK_MULTIPLE   (384) // If not using 24-bit data width, 256 should be enough
+#define EXAMPLE_MCLK_MULTIPLE   (256) // If not using 24-bit data width, 256 should be enough (this project uses 16-bit -- see main.cpp's I2S_BITS_PER_SAMPLE_16BIT)
 #define EXAMPLE_MCLK_FREQ_HZ    (EXAMPLE_SAMPLE_RATE * EXAMPLE_MCLK_MULTIPLE)
 #define EXAMPLE_VOICE_VOLUME    (85)
 
