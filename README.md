@@ -63,6 +63,36 @@ cd 01_SerialRW
 pio run
 ```
 
+## Flashing: bootloader mode, and why the COM port keeps changing
+
+This board uses **native USB CDC** — the ESP32-S3 chip's own USB
+peripheral, not a separate UART bridge chip (CP2102/CH340/etc.) like most
+dev boards. That has two consequences worth knowing before you flash
+anything:
+
+**To flash (enter bootloader/download mode):** hold **BOOT**, press and
+release **RESET** while still holding BOOT, then release BOOT. The board
+re-enumerates as a *different* USB device in this mode — expect the COM
+port number to change from whatever it was before. Flash at that new
+port (`pio run -t upload`, or `esptool.py write-flash` / the `docs/`
+web flasher's Connect+Flash steps).
+
+**After flashing:** this board has no auto-reset circuit wired to
+EN/IO0 — not the standard RTS/DTR toggle esptool.py/esptool-js use to
+reset most ESP32 boards after a flash, nor any other software-only
+method (confirmed: even esptool's own proven hard-reset sequence doesn't
+bring it out of bootloader mode). You have to press the physical
+**RESET** button yourself to actually boot into the firmware you just
+flashed. The board re-enumerates *again* at this point — a third
+possible COM port number, different from both the pre-flash and
+bootloader-mode ports.
+
+So across one flash-and-run cycle, don't be surprised to see the COM
+port change twice: once entering bootloader mode, and again after
+pressing RESET to start the app. If you're scripting this (or watching
+serial output right after a flash), re-enumerate the port list rather
+than assuming it stays put.
+
 ## Note on PSRAM
 
 This board's ESP32-S3-WROOM-1 module uses octal PSRAM (N16R8: 16MB flash, 8MB octal PSRAM). Some prebuilt firmware for this board has failed to boot with an instant, silent crash loop on this chip — that turned out *not* to be a PSRAM configuration problem (the octal-PSRAM settings were already correct), but PSRAM/flash timing is worth ruling out early if a new project on this board hits a similar boot loop.
