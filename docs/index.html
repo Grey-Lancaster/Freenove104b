@@ -65,7 +65,7 @@
         <span class="step-num">2</span>
         <h2>Connect your board</h2>
       </div>
-      <p class="step-help">Plug the device into a USB port, then click connect and pick it from the list.</p>
+      <p class="step-help">Plug the device into a USB port, then click connect and pick it from the list. This requires the board to be in bootloader mode (it's what actually flashes it) &mdash; to just read logs from a board that's already running normally, use <strong>View Device Logs</strong> below instead, no bootloader mode needed.</p>
       <button id="connectBtn" class="btn btn-primary" disabled>Connect Device</button>
       <span id="connectStatus" class="status"></span>
 
@@ -106,11 +106,12 @@
     <section class="card">
       <div class="step-head">
         <h2>Log</h2>
-        <button id="viewLogsBtn" class="btn btn-ghost hidden">View Device Logs</button>
+        <button id="viewLogsBtn" class="btn btn-ghost">View Device Logs</button>
         <button id="resetDeviceBtn" class="btn btn-ghost hidden">Reset Device</button>
         <button id="stopLogsBtn" class="btn btn-ghost hidden">Stop Logs</button>
         <button id="clearLogBtn" class="btn btn-ghost">Clear</button>
       </div>
+      <p class="step-help" style="margin: -4px 0 10px;">Works on a board that's already running normally &mdash; no bootloader mode or flashing required, just a plain serial connection.</p>
       <pre id="log" class="log"></pre>
     </section>
 

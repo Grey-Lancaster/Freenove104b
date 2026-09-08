@@ -300,7 +300,19 @@ async function openLogTransport(timeoutMs = 8000, intervalMs = 150) {
 }
 
 async function startLogStream() {
-  if (!device) return;
+  // Logs don't need the ROM bootloader handshake connectDevice() does (that
+  // handshake only works with the board actually in bootloader mode, since
+  // it's what flashing needs) -- just request a plain serial port directly,
+  // so this works standalone against a board that's already running
+  // normally, without going through Connect/Flash first.
+  if (!device) {
+    try {
+      device = await navigator.serial.requestPort();
+    } catch (err) {
+      if (err.name !== "NotFoundError") logLine(`Error: ${err.message || err}`);
+      return;
+    }
+  }
 
   els.viewLogsBtn.classList.add("hidden");
   els.resetDeviceBtn.classList.remove("hidden");
