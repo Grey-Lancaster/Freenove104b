@@ -2,6 +2,7 @@
 #include "driver_sdmmc.h"
 #include "main_ui.h"
 #include "lv_img.h"
+#include "fallback_img.h"
 
 lvgl_picture_ui guider_picture_ui;  //picture ui structure 
 static int picture_index_num = 0;     //index number of the picture
@@ -71,7 +72,8 @@ void setup_scr_picture(lvgl_picture_ui *ui){
   
   lv_img_home_init();
   lv_img_left_init();
-  lv_img_right_init();  
+  lv_img_right_init();
+  lv_img_fallback_picture_init();
 
   /*Init the pressed style*/
   static lv_style_t style_pr;//Apply for a style
@@ -134,7 +136,7 @@ void setup_scr_picture(lvgl_picture_ui *ui){
 
 //Read the image file and display it
 void picture_imgbtn_display(const char *name){
-  if(name!=NULL){
+  if(name!=NULL && name[0]!='\0'){
     char buf_picture_name[100]={"S:"};
     strcat(buf_picture_name,PICTURE_FOLDER);
     strcat(buf_picture_name,"/");
@@ -143,6 +145,9 @@ void picture_imgbtn_display(const char *name){
     lv_img_set_src(guider_picture_ui.picture_show, buf_picture_name);
   }
   else{
-    lv_img_set_src(guider_picture_ui.picture_show, LV_SYMBOL_DUMMY "The picture folder has no files.");
+    // No SD card, or the /picture folder is empty -- show the embedded
+    // fallback image instead of leaving the screen blank.
+    Serial.println("No SD card / no pictures found -- showing fallback image.");
+    lv_img_set_src(guider_picture_ui.picture_show, &img_fallback_picture);
   }
 }
