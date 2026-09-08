@@ -35,7 +35,6 @@ const els = {
   log: document.getElementById("log"),
   clearLogBtn: document.getElementById("clearLogBtn"),
   viewLogsBtn: document.getElementById("viewLogsBtn"),
-  resetDeviceBtn: document.getElementById("resetDeviceBtn"),
   stopLogsBtn: document.getElementById("stopLogsBtn"),
   noPortDialog: document.getElementById("noPortDialog"),
   noPortCancelBtn: document.getElementById("noPortCancelBtn"),
@@ -222,17 +221,6 @@ els.flashBtn.addEventListener("click", async () => {
     });
 
     logLine("Flash complete.");
-    // Try the standard RTS/DTR auto-reset -- harmless if it works, but this
-    // board has no auto-reset circuit wired to EN/IO0 (confirmed: even this
-    // exact sequence doesn't bring it out of bootloader mode), so don't
-    // count on it or block on it.
-    try {
-      await transport.setRTS(true);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      await esploader.after();
-    } catch {
-      // ignored -- see above
-    }
     await transport.disconnect();
 
     els.progressLabel.textContent = "Done!";
@@ -242,7 +230,7 @@ els.flashBtn.addEventListener("click", async () => {
     setConnectStatus("Disconnected", "");
     els.connectBtn.textContent = "Connect Device";
 
-    logLine("Press the board's RESET button now, then click \"View Device Logs\" below to watch it boot.");
+    logLine("Power-cycle the board (unplug/replug) to boot into the new firmware, then click \"View Device Logs\" below to watch it come up.");
     els.viewLogsBtn.classList.remove("hidden");
   } catch (err) {
     console.error(err);
@@ -263,16 +251,15 @@ els.clearLogBtn.addEventListener("click", () => {
 // --- Device logs ---
 // Reopens the same already-authorized port (no picker dialog) to stream
 // its console output, the way ESP Web Tools' "Logs" step does. This board
-// uses native USB CDC -- the chip's own USB peripheral resets along with
-// the chip itself, unlike a board with a separate UART bridge chip (which
-// stays connected to the PC through a target reset) -- so every reset
-// drops the port and it re-enumerates a moment later. That means we can
-// never "stay connected through a reset"; we can only reconnect
-// afterward, and how long that takes varies -- and since this board needs
-// a physical RESET button press rather than a software reset (see
-// resetDevice() below), the caller may need real time to actually walk
-// over and press it -- so this retries for a while instead of trying once
-// after a fixed delay.
+// uses native USB CDC -- the chip's own USB peripheral drops out along
+// with the chip's own power cycle, unlike a board with a separate UART
+// bridge chip (which stays connected to the PC the whole time) -- so a
+// power cycle always drops the port, and it re-enumerates a moment later.
+// That means we can never "stay connected through" one; we can only
+// reconnect afterward, and how long that takes varies -- and since this
+// board needs to actually be power-cycled by hand, the caller may need
+// real time to do that -- so this retries for a while instead of trying
+// once after a fixed delay.
 async function openLogTransport(timeoutMs = 20000, intervalMs = 150) {
   const deadline = Date.now() + timeoutMs;
   let lastErr;
@@ -305,7 +292,6 @@ async function startLogStream() {
   }
 
   els.viewLogsBtn.classList.add("hidden");
-  els.resetDeviceBtn.classList.remove("hidden");
   els.stopLogsBtn.classList.remove("hidden");
   els.connectBtn.disabled = true;
 
@@ -316,8 +302,7 @@ async function startLogStream() {
     logTransport = myTransport;
     logStreamClosed = false;
     // Guard against a stale callback from a *previous* logTransport
-    // (e.g. one killed by resetDevice()'s own reset pulse) tearing down
-    // whatever we just reconnected to here.
+    // tearing down whatever we just reconnected to here.
     logTransport.setDeviceLostCallback(() => {
       if (logTransport === myTransport) stopLogStream();
     });
@@ -347,32 +332,10 @@ async function stopLogStream() {
     }
     logTransport = null;
   }
-  els.resetDeviceBtn.classList.add("hidden");
   els.stopLogsBtn.classList.add("hidden");
   els.viewLogsBtn.classList.remove("hidden");
   els.connectBtn.disabled = false;
 }
 
-// This board has no auto-reset circuit wired to EN/IO0 -- the standard
-// RTS/DTR toggle esptool-js and esptool.py both use to reset ESP32 boards
-// doesn't do anything here (confirmed: even after a successful flash, it
-// stays in bootloader mode until the physical RESET button is pressed).
-// So rather than pretend a software reset pulse works, this just releases
-// the current connection and waits for you to press the button yourself,
-// then reconnects once the board reappears.
-async function resetDevice() {
-  if (!logTransport) return;
-  logLine("--- Press the board's RESET button now... ---");
-  const oldTransport = logTransport;
-  try {
-    await oldTransport.disconnect();
-  } catch {
-    // already gone, fine
-  }
-  if (logTransport === oldTransport) logTransport = null;
-  startLogStream();
-}
-
 els.viewLogsBtn.addEventListener("click", startLogStream);
-els.resetDeviceBtn.addEventListener("click", resetDevice);
 els.stopLogsBtn.addEventListener("click", stopLogStream);
