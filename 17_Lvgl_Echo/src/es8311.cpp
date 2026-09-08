@@ -457,6 +457,13 @@ esp_err_t es8311_codec_init(void)
     ESP_RETURN_ON_ERROR(es8311_sample_frequency_config(es_handle, EXAMPLE_SAMPLE_RATE * EXAMPLE_MCLK_MULTIPLE, EXAMPLE_SAMPLE_RATE), TAG, "set es8311 sample frequency failed");
     ESP_RETURN_ON_ERROR(es8311_voice_volume_set(es_handle, EXAMPLE_VOICE_VOLUME, NULL), TAG, "set es8311 volume failed");
     ESP_RETURN_ON_ERROR(es8311_microphone_config(es_handle, false), TAG, "set es8311 microphone failed");
-    // ESP_RETURN_ON_ERROR(es8311_microphone_gain_set(es_handle, ES8311_MIC_GAIN_24DB), TAG, "set es8311 microphone gain failed");
+    // This was left commented out (copied from 07_Echo, which never enabled
+    // it either) -- it's a separate digital gain stage from the PGA gain
+    // es8311_microphone_config() already sets, and leaving it unset is why
+    // 17_Lvgl_Echo's recordings came back essentially inaudible. The sibling
+    // `translate` project (github.com/Grey-Lancaster/translate) hit and
+    // documented this exact issue on the same codec: even 24DB wasn't
+    // enough to pick up a quieter voice, needed the max, 42DB.
+    ESP_RETURN_ON_ERROR(es8311_microphone_gain_set(es_handle, ES8311_MIC_GAIN_42DB), TAG, "set es8311 microphone gain failed");
     return ESP_OK;
 }

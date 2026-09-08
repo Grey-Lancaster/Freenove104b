@@ -81,6 +81,19 @@ void driver_es8311_init(void) {
     return;
   }
   I2S.setAllPins(I2S_BCK, I2S_WS, -1, I2S_DOUT, I2S_DINT); // sck, fs, sd(unused in duplex), outSd, inSd
+  // Must be called before begin() -- sizes the DMA/ring buffers used by
+  // every I2S.read()/write() call. The library's default (128 samples ->
+  // 256 bytes at 16-bit) is tiny: each read/write call has a few ms of
+  // fixed overhead (task/ring-buffer bookkeeping) on top of however long
+  // the actual audio transfer takes, and at 256 bytes/call that overhead
+  // is comparable to the ~4ms of real audio being requested -- consistently
+  // falling behind real-time by roughly 2x, losing about every other DMA
+  // buffer's worth of audio to ring-buffer overflow between calls. That's
+  // what made recordings play back at ~2x speed. 1024 (the library's max)
+  // makes each call request ~32ms of audio at once, making that fixed
+  // per-call overhead a small fraction of the transfer instead of roughly
+  // doubling it.
+  I2S.setBufferSize(1024);
   if (!I2S.begin(I2S_PHILIPS_MODE, SAMPLE_RATE, BITS_PER_SAMPLE)) {
     Serial.println("Failed to initialize I2S bus!");
     return;
@@ -129,20 +142,49 @@ void loop()
 
   // Record 5 seconds of audio data
   Serial.println("Start recording for 5 seconds...");
+  // Stops by real wall-clock time, not a fixed nominal byte target. The
+  // Arduino-ESP32 I2S library (libraries/I2S/src/I2S.cpp) has a real bug in
+  // its receive path: _rx_done_routine()'s per-DMA-event drain size omits
+  // the *2-for-stereo factor its _tx_done_routine() counterpart has (found
+  // by reading the library source directly), so it only pulls about half
+  // of each stereo DMA transfer into the ring buffer -- roughly every
+  // other segment of real audio never makes it in. Read throughput ends up
+  // at about half the nominal rate regardless of chunk size, so waiting
+  // for a fixed byte count made this silently take ~10s for a "5 second"
+  // recording, and playing that undersized-for-its-nominal-length buffer
+  // back at the (correctly paced) write side made it sound sped up. Can't
+  // fix the library from here, so accept whatever real bytes I2S.read()
+  // delivers in RECORD_SECONDS of real time and play back that actual
+  // count instead.
   size_t recorded = 0;
-  while (recorded < wav_size) {
+  uint32_t record_start_ms = millis();
+  while (millis() - record_start_ms < (uint32_t)RECORD_SECONDS * 1000 && recorded < wav_size) {
     size_t chunk = min(audioBufferBytes, wav_size - recorded);
-    I2S.read(wav_buffer + recorded, chunk);
-    recorded += chunk;
+    // I2S.read() returns how many bytes it actually delivered -- can be
+    // less than requested. Only count what was actually received.
+    int got = I2S.read(wav_buffer + recorded, chunk);
+    if (got > 0) {
+      recorded += (size_t)got;
+    }
   }
-  Serial.println("Recording completed.");
+  Serial.printf("Recording completed: %u bytes in %lums.\n", (unsigned)recorded, (unsigned long)(millis() - record_start_ms));
   delay(1000);
 
   Serial.println("Start playing the recording...");
   size_t played = 0;
-  while (played < wav_size) {
-    size_t chunk = min(audioBufferBytes, wav_size - played);
-    I2S.write(wav_buffer + played, chunk);
+  while (played < recorded) {
+    size_t chunk = min(audioBufferBytes, recorded - played);
+    // Plain I2S.write() resolves to write_nonblocking(), which SILENTLY
+    // DROPS (not queues) anything that doesn't fit in the ~8KB output ring
+    // buffer right now, returning immediately either way -- this loop was
+    // completing almost instantly and producing static/silence instead of
+    // the recording, because most of each chunk was thrown away rather
+    // than actually sent to the codec. write_blocking() genuinely blocks
+    // until the chunk is queued, which both fixes that and (since it's
+    // sized to fit one DMA buffer) paces this loop to real playback speed.
+    // The sibling `translate` project independently hit and documented
+    // this same bug on this same I2S library.
+    I2S.write_blocking(wav_buffer + played, chunk);
     played += chunk;
   }
   Serial.println("Playback has been completed.");

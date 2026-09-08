@@ -41,7 +41,8 @@ lvgl_echo_ui guider_echo_ui;
 
 static size_t audio_buffer_bytes = 0;
 static uint8_t *wav_buffer = NULL;
-static size_t wav_size = 0;
+static size_t wav_size = 0;       // PSRAM buffer capacity (upper bound only)
+static size_t recorded_bytes = 0; // bytes actually captured by the most recent recording
 static bool has_recording = false;
 static TaskHandle_t echoTaskHandle = NULL;
 // 0 = idle, 1 = recording, 2 = playing -- guards against re-entering while
@@ -79,12 +80,35 @@ static void record_task(void *pvParameters)
   size_t recorded = 0;
   uint32_t start_ms = millis();
   int last_shown = -1;
+  const uint32_t record_ms = (uint32_t)RECORD_SECONDS * 1000;
 
-  while (recorded < wav_size)
+  // Stops by real wall-clock time, not a fixed nominal byte target. The
+  // Arduino-ESP32 I2S library (libraries/I2S/src/I2S.cpp) has a real bug in
+  // its receive path: _rx_done_routine()'s per-DMA-event drain size omits
+  // the *2-for-stereo factor its _tx_done_routine() counterpart has (found
+  // by reading the library source directly), so it only pulls about half
+  // of each stereo DMA transfer into the ring buffer -- roughly every other
+  // segment of real audio never makes it in. Read throughput ends up at
+  // about half the nominal rate REGARDLESS of the chunk size requested
+  // here (confirmed empirically: an 8x bigger read request still took ~2x
+  // the expected time per call), so waiting for a fixed byte count made
+  // recording silently take ~2x longer than RECORD_SECONDS, and playing
+  // that undersized-for-its-nominal-length buffer back at the (correctly
+  // paced) write side made it sound sped up. This can't be fixed from our
+  // own sketch code (it's a bug in the vendored framework library), so
+  // instead of fighting it, just accept whatever real bytes I2S.read()
+  // actually delivers in RECORD_SECONDS of real time, and use that actual
+  // count for playback too.
+  while (millis() - start_ms < record_ms && recorded < wav_size)
   {
     size_t chunk = min(audio_buffer_bytes, wav_size - recorded);
-    I2S.read(wav_buffer + recorded, chunk);
-    recorded += chunk;
+    // I2S.read() returns how many bytes it actually delivered -- can be
+    // less than requested. Only count what was actually received.
+    int got = I2S.read(wav_buffer + recorded, chunk);
+    if (got > 0)
+    {
+      recorded += (size_t)got;
+    }
 
     int elapsed = (millis() - start_ms) / 1000;
     if (elapsed != last_shown)
@@ -95,11 +119,27 @@ static void record_task(void *pvParameters)
     }
   }
 
+  recorded_bytes = recorded;
+
+  // Peak-level diagnostic (same idea as the sibling `translate` project's
+  // mic liveness check): tells us from the serial log alone whether real
+  // signal made it into the buffer, rather than having to judge by ear.
+  int16_t peak = 0;
+  size_t sample_count = recorded_bytes / sizeof(int16_t);
+  int16_t *samples = (int16_t *)wav_buffer;
+  for (size_t i = 0; i < sample_count; i++)
+  {
+    int16_t v = samples[i];
+    if (v < 0) v = -v;
+    if (v > peak) peak = v;
+  }
+  Serial.printf("Recording complete: %u bytes in %lums. Peak sample level: %d / 32767\n",
+                (unsigned)recorded_bytes, (unsigned long)(millis() - start_ms), peak);
+
   has_recording = true;
   echo_task_flag = 0;
   set_status("Recording complete. Ready to play.");
   set_buttons_enabled(true);
-  Serial.println("Recording complete.");
   vTaskDelete(NULL);
 }
 
@@ -110,10 +150,22 @@ static void play_task(void *pvParameters)
   uint32_t start_ms = millis();
   int last_shown = -1;
 
-  while (played < wav_size)
+  digitalWrite(AP_ENABLE, LOW);  // un-mute the speaker amp for playback (LOW == on, see echo_iis_init())
+
+  while (played < recorded_bytes)
   {
-    size_t chunk = min(audio_buffer_bytes, wav_size - played);
-    I2S.write(wav_buffer + played, chunk);
+    size_t chunk = min(audio_buffer_bytes, recorded_bytes - played);
+    // Plain I2S.write() resolves to write_nonblocking(), which SILENTLY
+    // DROPS (not queues) anything that doesn't fit in the ~8KB output ring
+    // buffer right now, returning immediately either way -- that's why
+    // playback was completing almost instantly and producing static: most
+    // of each chunk was being thrown away, not actually sent to the codec.
+    // write_blocking() genuinely blocks until the chunk is queued, which is
+    // both correct and (since it's sized to fit one DMA buffer) exactly
+    // what paces this loop to real playback speed. Root-caused by reading
+    // I2S.cpp directly; the sibling `translate` project independently hit
+    // and documented the same bug this same way.
+    I2S.write_blocking(wav_buffer + played, chunk);
     played += chunk;
 
     int elapsed = (millis() - start_ms) / 1000;
@@ -124,6 +176,12 @@ static void play_task(void *pvParameters)
       set_status(buf);
     }
   }
+
+  // Mute the amp again once done -- without this, whatever the I2S/DAC
+  // output settles to after the last real sample (DC bias, ring-buffer
+  // underrun noise) keeps coming out as audible static through the
+  // still-enabled amp until the next playback starts.
+  digitalWrite(AP_ENABLE, HIGH);
 
   echo_task_flag = 0;
   set_status("Playback complete. Ready to play again.");
@@ -205,7 +263,7 @@ void setup_scr_echo(lvgl_echo_ui *ui)
 int echo_iis_init(void)
 {
   pinMode(AP_ENABLE, OUTPUT);
-  digitalWrite(AP_ENABLE, LOW);
+  digitalWrite(AP_ENABLE, HIGH);  // amp muted by default; play_task un-mutes it only while actually playing
 
   Wire.begin(I2C_SDA, I2C_SCL, I2C_SPEED);
 
@@ -221,6 +279,20 @@ int echo_iis_init(void)
     return -1;
   }
   I2S.setAllPins(I2S_BCK, I2S_WS, -1, I2S_DOUT, I2S_DINT);  // sck, fs, sd(unused in duplex), outSd, inSd
+  // Must be called before begin() -- sizes the DMA/ring buffers used by
+  // every I2S.read()/write() call. The library's default (128 samples ->
+  // 256 bytes at 16-bit) is tiny: each read/write call has a few ms of
+  // fixed overhead (task/ring-buffer bookkeeping) on top of however long
+  // the actual audio transfer takes, and at 256 bytes/call that overhead
+  // is comparable to the ~4ms of real audio being requested -- consistently
+  // falling behind real-time by roughly 2x, losing about every other DMA
+  // buffer's worth of audio to ring-buffer overflow between calls. That's
+  // what made recordings play back at ~2x speed (5s of real audio squeezed
+  // into a buffer recorded over ~10 real seconds). 1024 (the library's max)
+  // makes each call request ~32ms of audio at once, making that fixed
+  // per-call overhead a small fraction of the transfer instead of roughly
+  // doubling it.
+  I2S.setBufferSize(1024);
   if (!I2S.begin(I2S_PHILIPS_MODE, SAMPLE_RATE, BITS_PER_SAMPLE))
   {
     Serial.println("Failed to initialize I2S bus!");
