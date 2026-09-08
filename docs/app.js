@@ -378,12 +378,24 @@ async function pulseReset(transport) {
 async function resetDevice() {
   if (!logTransport) return;
   logLine("--- Reset ---");
+  const oldTransport = logTransport;
   try {
-    await pulseReset(logTransport);
+    await pulseReset(oldTransport);
   } catch {
     // Expected: the port is usually already gone by the time this
     // returns, since the chip's USB peripheral just reset too.
   }
+  // Explicitly release the port instead of waiting on the browser's own
+  // disconnect detection to notice and clean up -- that can lag behind
+  // this function returning, and the browser refuses to open a
+  // still-"open" SerialPort ("The port is already open"), even once the
+  // chip behind it has physically reset.
+  try {
+    await oldTransport.disconnect();
+  } catch {
+    // already gone, fine
+  }
+  if (logTransport === oldTransport) logTransport = null;
   startLogStream();
 }
 
